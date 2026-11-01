@@ -1,0 +1,31 @@
+# ── Personal / sensitive data (never commit these) ───────────────────────────
+# Real redemption codes are single-use and must stay private.
+codes.csv
+unused_codes*.txt
+codes*.txt
+output/
+*.pdf
+
+# Background / card artwork (bring your own)
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Editors / OS ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
