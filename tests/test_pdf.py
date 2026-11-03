@@ -123,6 +123,20 @@ def test_build_pdf_logs_destination(tmp_path):
     assert messages == [f"Saved 1 cards to: {pdf_path}"]
 
 
+def test_clean_run_keeps_only_the_current_codes(tmp_path):
+    out = make_cards(tmp_path, 3)
+
+    csv_path = tmp_path / "codes.csv"
+    csv_path.write_text("CODE9999", encoding="utf-8")
+    template_path = tmp_path / "template.txt"
+    template_path.write_text("Code:\n${CODE}\n", encoding="utf-8")
+
+    process_codes(str(csv_path), str(template_path), str(out), clean=True, log=lambda _: None)
+
+    assert [card["code"] for card in collect_cards(str(out))] == ["CODE9999"]
+    assert build_pdf(str(out), str(tmp_path / "cards.pdf"), log=lambda _: None) == 1
+
+
 def test_find_default_background(tmp_path):
     assert find_default_background(str(tmp_path)) is None
 

@@ -40,11 +40,17 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_EXPIRY,
         help=f'Expiry text substituted for ${{EXPIRY}} in the template (default: "{DEFAULT_EXPIRY}")',
     )
+    parser.add_argument(
+        "--clean",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Empty the cards folder before generating so old codes are not reused (default: clean)",
+    )
 
     args = parser.parse_args(argv)
 
     try:
-        process_codes(args.csv, args.template, args.output, args.expiry)
+        process_codes(args.csv, args.template, args.output, args.expiry, clean=args.clean)
     except GocaError as exc:
         parser.exit(2, f"error: {exc}\n")
     return 0

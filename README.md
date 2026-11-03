@@ -29,7 +29,8 @@ first run, and then opens the window.
 The window has three numbered sections — **1 · Redemption codes**, **2 · Printable PDF**, and a live
 **Log** with a progress bar:
 
-- **Generate cards only** — writes `<cards folder>/<CODE>/message.txt` and `QR.png` for every code.
+- **Generate cards only** — writes `<cards folder>/<CODE>/message.txt` and `QR.png` for every code,
+  emptying the cards folder first.
 - **Build PDF only** — lays out whatever is already in the cards folder.
 - **Generate + Build PDF** — does both in one go (the usual choice).
 
@@ -40,7 +41,9 @@ The window has three numbered sections — **1 · Redemption codes**, **2 · Pri
    `code`/`passcode` is treated as a header and skipped.
 2. **Message template** — see [Template variables](#template-variables).
 3. **Expiry date** — free text substituted into `${EXPIRY}`, e.g. `July 31st 2026`.
-4. **Cards folder** — where the per-code folders are created (default `./output`).
+4. **Cards folder** — where the per-code folders are created (default `./output`). It is
+   **emptied at the start of every run**, so the PDF only ever contains the codes you just
+   generated.
 5. **PDF output** — where the finished PDF is written (default `./cards.pdf`).
 6. **Background image** — *optional*; centred and cropped to fill each card. If a file named
    `background.png` / `background.jpg` sits next to the scripts it is picked automatically.
@@ -53,13 +56,16 @@ Both scripts work without the UI and accept `-h`.
 # Step 1 - card data: ./output/<CODE>/message.txt + QR.png
 python pokemon.py codes.csv template.txt --expiry "July 31st 2026"
 
+# Keep folders from earlier runs instead of starting clean:
+python pokemon.py codes.csv template.txt --no-clean
+
 # Step 2 - printable PDF: ./cards.pdf
 python createpdf.py --pdf cards.pdf --background art.png
 ```
 
 | Script | Arguments |
 | --- | --- |
-| `pokemon.py` | `csv` (required), `template` (default `template.txt`), `-o/--output` (default `./output`), `-e/--expiry` (default `N/A`) |
+| `pokemon.py` | `csv` (required), `template` (default `template.txt`), `-o/--output` (default `./output`), `-e/--expiry` (default `N/A`), `--clean/--no-clean` (default `--clean`) |
 | `createpdf.py` | `output_dir` (default `./output`), `-p/--pdf` (default `./cards.pdf`), `-b/--background` (optional) |
 
 You can also start the UI from the command line:

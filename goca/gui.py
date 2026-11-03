@@ -53,6 +53,7 @@ class GocaApp(ttk.Frame):
         super().__init__(master, padding=PAD)
         self._queue: queue.Queue = queue.Queue()
         self._worker: threading.Thread | None = None
+        self._poll_id: str | None = None
 
         self.csv_var = tk.StringVar(value=self._first_existing("codes.csv"))
         self.template_var = tk.StringVar(value=self._first_existing("template.txt"))
@@ -67,7 +68,8 @@ class GocaApp(ttk.Frame):
             f"{APP_NAME} {__version__} ready. Choose your files, then press "
             "'Generate + Build PDF'."
         )
-        self.after(100, self._poll)
+        self.bind("<Destroy>", self._on_destroy)
+        self._poll_id = self.after(100, self._poll)
         self.csv_entry.focus_set()
 
     # ── layout ───────────────────────────────────────────────────────────────
@@ -101,7 +103,7 @@ class GocaApp(ttk.Frame):
 
         self._path_row(
             source, row, "Cards folder:", self.outdir_var, "dir", None,
-            hint="one sub-folder per code is created here",
+            hint="emptied each run, then one sub-folder per code is created",
         )
 
         target = ttk.LabelFrame(self, text="2 · Printable PDF", padding=PAD)
@@ -227,6 +229,7 @@ class GocaApp(ttk.Frame):
             settings["template"],
             settings["outdir"],
             settings["expiry"],
+            clean=True,
             log=self._log,
         )
 
@@ -306,6 +309,7 @@ class GocaApp(ttk.Frame):
             self._queue.put(("done", results))
 
     def _poll(self) -> None:
+        self._poll_id = None
         try:
             while True:
                 kind, payload = self._queue.get_nowait()
@@ -319,7 +323,17 @@ class GocaApp(ttk.Frame):
                     self._set_busy(False, self._summary(payload))
         except queue.Empty:
             pass
-        self.after(80, self._poll)
+        self._poll_id = self.after(80, self._poll)
+
+    def _on_destroy(self, event: tk.Event) -> None:
+        """Stop the poll loop so the widget can be collected with its interpreter."""
+        if event.widget is not self or self._poll_id is None:
+            return
+        try:
+            self.after_cancel(self._poll_id)
+        except tk.TclError:
+            pass
+        self._poll_id = None
 
     @staticmethod
     def _summary(results) -> str:

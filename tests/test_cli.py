@@ -31,6 +31,32 @@ def test_pokemon_cli_generates_cards(workspace):
     assert (out / "BBBB2222" / "QR.png").is_file()
 
 
+def test_pokemon_cli_cleans_the_cards_folder_by_default(workspace):
+    root, csv_path, template_path = workspace
+    out = root / "output"
+    stale = out / "OLDCARD0000"
+    stale.mkdir(parents=True)
+    (stale / "message.txt").write_text("old", encoding="utf-8")
+
+    assert pokemon.main([str(csv_path), str(template_path), "-o", str(out)]) == 0
+
+    assert not stale.exists()
+    assert (out / "AAAA1111" / "message.txt").is_file()
+
+
+def test_pokemon_cli_keeps_existing_folders_with_no_clean(workspace):
+    root, csv_path, template_path = workspace
+    out = root / "output"
+    stale = out / "OLDCARD0000"
+    stale.mkdir(parents=True)
+    (stale / "message.txt").write_text("old", encoding="utf-8")
+
+    assert pokemon.main([str(csv_path), str(template_path), "-o", str(out), "--no-clean"]) == 0
+
+    assert stale.is_dir()
+    assert (out / "AAAA1111" / "message.txt").is_file()
+
+
 def test_pokemon_cli_reports_missing_csv(workspace, capsys):
     root, _, template_path = workspace
 

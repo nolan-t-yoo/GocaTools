@@ -1,5 +1,6 @@
 """Tests for the tkinter UI (skipped when no display is available)."""
 
+import gc
 import time
 import tkinter as tk
 
@@ -9,8 +10,8 @@ from goca import gui
 from goca.gui import GocaApp
 
 
-@pytest.fixture()
-def root():
+@pytest.fixture(scope="session")
+def tk_root():
     widget = None
     error = None
     # Tk initialisation occasionally fails on first use in a fresh interpreter,
@@ -31,6 +32,15 @@ def root():
         yield widget
     finally:
         widget.destroy()
+
+
+@pytest.fixture()
+def root(tk_root):
+    """Share one interpreter, but drop this test's widgets while it is still alive."""
+    yield tk_root
+    for child in tk_root.winfo_children():
+        child.destroy()
+    gc.collect()
 
 
 @pytest.fixture(autouse=True)
@@ -138,6 +148,19 @@ def test_generate_and_build_write_cards_and_pdf(root, inputs):
     )
     assert count == 2
     assert inputs["pdf"].read_bytes().startswith(b"%PDF")
+
+
+def test_generate_clears_the_cards_folder(root, inputs):
+    app = make_app(root, inputs)
+    stale = inputs["out"] / "OLDCARD0000"
+    stale.mkdir(parents=True)
+    (stale / "message.txt").write_text("old", encoding="utf-8")
+
+    summary = app._generate(app._read_settings())
+
+    assert summary["cleaned"] == 1
+    assert not stale.exists()
+    assert (inputs["out"] / "AAAA1111" / "QR.png").is_file()
 
 
 def test_worker_reports_completion(root, inputs):

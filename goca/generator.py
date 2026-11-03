@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+import shutil
 from typing import Callable
 
+from . import ROOT
 from .codes import (
     DEFAULT_EXPIRY,
     GocaError,
@@ -19,16 +21,60 @@ from .codes import (
 Log = Callable[[str], None]
 
 
+def clean_cards_folder(output_dir: str, log: Log = print) -> int:
+    """Delete everything inside *output_dir*; return how many entries were removed.
+
+    Only the contents are removed, so the folder itself survives. Paths that would
+    be dangerous to empty (drive root, home folder, the project folder or any
+    parent of it) are refused.
+    """
+    if not os.path.isdir(output_dir):
+        return 0
+
+    target = os.path.realpath(output_dir)
+    project = os.path.realpath(ROOT)
+    protected = {
+        os.path.realpath(os.sep),
+        os.path.realpath(os.path.expanduser("~")),
+        project,
+    }
+
+    if target in protected or project.startswith(target + os.sep):
+        raise GocaError(
+            f"Refusing to clean {output_dir}. Pick a dedicated cards folder "
+            "instead of your home folder, a drive root or the project folder."
+        )
+
+    removed = 0
+    for name in os.listdir(output_dir):
+        entry = os.path.join(output_dir, name)
+        try:
+            if os.path.isdir(entry) and not os.path.islink(entry):
+                shutil.rmtree(entry)
+            else:
+                os.remove(entry)
+        except OSError as exc:
+            raise GocaError(f"Could not clean {entry}: {exc}") from exc
+        removed += 1
+
+    log(f"Cleaned {removed} old item{'s' if removed != 1 else ''} from {output_dir}")
+    return removed
+
+
 def process_codes(
     csv_path: str,
     template_path: str,
     output_dir: str,
     expiry: str = DEFAULT_EXPIRY,
+    clean: bool = False,
     log: Log = print,
 ) -> dict:
     """Create ``<output_dir>/<CODE>/{message.txt,QR.png}`` for every code.
 
-    Returns a summary with ``total``, ``written``, ``skipped`` and
+    When *clean* is true the cards folder is emptied first, so a PDF built
+    afterwards only contains the codes from this run.
+
+    Returns a summary with ``total``, ``written``, ``skipped``, ``cleaned`` and
     ``output_dir`` keys.
     """
     codes = load_codes(csv_path)
@@ -36,6 +82,9 @@ def process_codes(
 
     if not codes:
         raise GocaError(f"No codes found in {csv_path}")
+
+    # Only touch the folder once the inputs are known to be usable.
+    removed = clean_cards_folder(output_dir, log=log) if clean else 0
 
     log(f"Processing {len(codes)} codes...")
 
@@ -70,5 +119,6 @@ def process_codes(
         "total": len(codes),
         "written": written,
         "skipped": skipped,
+        "cleaned": removed,
         "output_dir": output_dir,
     }
