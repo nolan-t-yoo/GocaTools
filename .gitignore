@@ -12,6 +12,10 @@ output/
 *.jpeg
 *.webp
 
+# ...but the README screenshots are part of the project
+!docs/*.png
+!docs/*.jpg
+
 # ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]

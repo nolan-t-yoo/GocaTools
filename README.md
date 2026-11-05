@@ -19,6 +19,18 @@ Linux.
 
 ---
 
+## Screenshots
+
+The desktop UI after a run (the codes shown are fake):
+
+![The GocaTools window: code file, template, expiry, cards folder, PDF output and background
+picker above a live log and status bar](docs/ui.png)
+
+The generated PDF — 10 cards per page on US Letter, with an optional background image:
+
+![A printed page of ten 3.5 x 2 inch cards, each with the message on the left and a QR code on the
+right, over a blue gradient background](docs/sample-cards.jpg)
+
 ## Quick start
 
 1. Install [Python 3.9+](https://www.python.org/downloads/) (on Windows, tick
@@ -39,7 +51,7 @@ The window has three numbered sections — **1 · Redemption codes**, **2 · Pri
 - **Generate cards only** — writes `<cards folder>/<CODE>/message.txt` and `QR.png` for every code,
   emptying the cards folder first.
 - **Build PDF only** — lays out whatever is already in the cards folder.
-- **Generate + Build PDF** — does both in one go (the usual choice).
+- **Generate + Build PDF** — does both in one go (probably what you want).
 
 ## Using the UI
 
