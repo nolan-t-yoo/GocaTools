@@ -1,8 +1,15 @@
 # GocaTools
 
-Turn a list of Pokémon GO offer codes into **printable business cards** — each card has the
-rendered message on the left two-thirds and a scannable QR code on the right third, 10 cards per
-US Letter page.
+This toolset is primarily for Ambassadors in the Pokémon GO Ambassador Program.
+
+Each month, we get a set of codes via email. Some groups send them in PM's in Campfire, some groups
+use a web app. We prefer old-school.
+
+Claude helped. A lot.
+
+*ahem* Turn a list of Pokémon GO offer codes into **printable "gift" cards**. Copy your codes from
+the email into a .csv file. Pick a background, setup your message. Have them printed on cardstock,
+or DIY at home. Then, hand them out to your community!
 
 There is a point-and-click UI, a small CLI, and one-click launch scripts for Windows, macOS and
 Linux.
@@ -41,9 +48,8 @@ The window has three numbered sections — **1 · Redemption codes**, **2 · Pri
    `code`/`passcode` is treated as a header and skipped.
 2. **Message template** — see [Template variables](#template-variables).
 3. **Expiry date** — free text substituted into `${EXPIRY}`, e.g. `July 31st 2026`.
-4. **Cards folder** — where the per-code folders are created (default `./output`). It is
-   **emptied at the start of every run**, so the PDF only ever contains the codes you just
-   generated.
+4. **Cards folder** — where the per-code folders are created (default `./output`). It is **emptied
+   at the start of every run**, so the PDF only ever contains the codes you just generated.
 5. **PDF output** — where the finished PDF is written (default `./cards.pdf`).
 6. **Background image** — *optional*; centred and cropped to fill each card. If a file named
    `background.png` / `background.jpg` sits next to the scripts it is picked automatically.
