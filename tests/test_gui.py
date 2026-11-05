@@ -1,55 +1,28 @@
 """Tests for the tkinter UI (skipped when no display is available)."""
 
-import gc
 import time
-import tkinter as tk
 
 import pytest
 
 from goca import gui
-from goca.gui import GocaApp
-
-
-@pytest.fixture(scope="session")
-def tk_root():
-    widget = None
-    error = None
-    # Tk initialisation occasionally fails on first use in a fresh interpreter,
-    # so give it a couple of tries before treating the display as unavailable.
-    for _ in range(3):
-        try:
-            widget = tk.Tk()
-            break
-        except tk.TclError as exc:  # pragma: no cover - headless machines
-            error = exc
-            time.sleep(0.2)
-
-    if widget is None:  # pragma: no cover - headless machines
-        pytest.skip(f"tkinter display unavailable: {error}")
-
-    widget.withdraw()
-    try:
-        yield widget
-    finally:
-        widget.destroy()
+from goca.gui import PLACEHOLDER_CODE, GocaApp
 
 
 @pytest.fixture()
-def root(tk_root):
+def root(clean_tk):
     """Share one interpreter, but drop this test's widgets while it is still alive."""
-    yield tk_root
-    for child in tk_root.winfo_children():
-        child.destroy()
-    gc.collect()
+    yield clean_tk
 
 
 @pytest.fixture(autouse=True)
-def no_dialogs(monkeypatch):
-    """Replace modal dialogs so a failure cannot block the test run."""
+def no_side_effects(monkeypatch):
+    """Replace modal dialogs and the shell-open call so tests stay self-contained."""
     shown = []
     monkeypatch.setattr(gui.messagebox, "showerror", lambda *a, **k: shown.append(("error",) + a))
     monkeypatch.setattr(gui.messagebox, "showwarning", lambda *a, **k: shown.append(("warning",) + a))
     monkeypatch.setattr(gui.messagebox, "showinfo", lambda *a, **k: shown.append(("info",) + a))
+    # Never launch a real PDF viewer or file manager from a test.
+    monkeypatch.setattr(gui, "_open_path", lambda path: None)
     return shown
 
 
@@ -190,7 +163,7 @@ def test_worker_reports_input_errors(root, tmp_path):
     assert "Codes file not found" in messages[-1][1]
 
 
-def test_run_all_button_completes_from_a_worker_thread(root, inputs, no_dialogs):
+def test_run_all_button_completes_from_a_worker_thread(root, inputs, no_side_effects):
     """The button path must not touch Tk variables from the worker thread."""
     app = make_app(root, inputs)
 
@@ -199,21 +172,163 @@ def test_run_all_button_completes_from_a_worker_thread(root, inputs, no_dialogs)
 
     assert finished, f"run did not finish, status={app.status_var.get()!r}"
     assert app.status_var.get() == "Finished: 2 cards written, 2 cards -> PDF."
-    assert no_dialogs == []
+    assert no_side_effects == []
     assert (inputs["out"] / "BBBB2222" / "QR.png").is_file()
     assert inputs["pdf"].is_file()
     assert "RuntimeError" not in app.log_text.get("1.0", "end")
 
 
-def test_missing_inputs_warn_instead_of_running(root, no_dialogs):
+def test_missing_inputs_warn_instead_of_running(root, no_side_effects):
     app = make_app(root)
     app.csv_var.set("")
 
     app._on_generate()
 
-    assert no_dialogs and no_dialogs[0][0] == "warning"
-    assert "codes file" in no_dialogs[0][2]
+    assert no_side_effects and no_side_effects[0][0] == "warning"
+    assert "codes file" in no_side_effects[0][2]
     assert app.status_var.get() == "Ready."
+
+
+# ── "open the PDF when finished" ─────────────────────────────────────────────
+def test_open_pdf_is_on_by_default(root):
+    app = make_app(root)
+
+    assert app.open_pdf_var.get() is True
+    assert app._read_settings()["open_pdf"] is True
+
+
+def test_build_asks_to_open_the_pdf_when_the_box_is_ticked(root, inputs, monkeypatch):
+    opened = []
+    monkeypatch.setattr(gui, "_open_path", opened.append)
+    app = make_app(root, inputs)
+    settings = app._read_settings()
+
+    app._generate(settings)
+    app._build(settings)
+    messages = drain(app._queue)
+
+    assert ("open", str(inputs["pdf"])) in messages
+
+    app._open_pdf(str(inputs["pdf"]))
+
+    assert opened == [str(inputs["pdf"])]
+    assert f"Opened {inputs['pdf']}" in app.log_text.get("1.0", "end")
+
+
+def test_build_leaves_the_pdf_closed_when_the_box_is_cleared(root, inputs, monkeypatch):
+    opened = []
+    monkeypatch.setattr(gui, "_open_path", opened.append)
+    app = make_app(root, inputs)
+    app.open_pdf_var.set(False)
+    settings = app._read_settings()
+
+    app._generate(settings)
+    app._build(settings)
+
+    assert [m for m in drain(app._queue) if m[0] == "open"] == []
+    assert opened == []
+
+
+def test_open_failure_is_logged_not_raised(root, inputs, monkeypatch):
+    def boom(path):
+        raise OSError("no association")
+
+    monkeypatch.setattr(gui, "_open_path", boom)
+    app = make_app(root, inputs)
+
+    app._open_pdf(str(inputs["pdf"]))
+
+    assert "Could not open the PDF" in app.log_text.get("1.0", "end")
+
+
+def test_empty_build_does_not_ask_to_open(root, inputs):
+    app = make_app(root, inputs)
+    inputs["out"].mkdir(parents=True, exist_ok=True)
+
+    count = app._build(app._read_settings())
+
+    assert count == 0
+    assert [m for m in drain(app._queue) if m[0] == "open"] == []
+
+
+# ── preview ──────────────────────────────────────────────────────────────────
+def card_texts(app):
+    return [
+        app.preview.canvas.itemcget(item, "text")
+        for item in app.preview.canvas.find_all()
+        if app.preview.canvas.type(item) == "text"
+    ]
+
+
+def test_preview_renders_the_template(root, inputs):
+    app = make_app(root, inputs)
+
+    app._refresh_preview()
+
+    assert card_texts(app) == ["Code:", "AAAA1111", "Expires:", "Soon"]
+
+
+def test_preview_follows_the_expiry_field(root, inputs):
+    app = make_app(root, inputs)
+
+    app.expiry_var.set("Next week")
+    app._refresh_preview()
+
+    assert "Next week" in card_texts(app)
+
+
+def test_preview_shows_a_hint_without_a_template(root, tmp_path):
+    app = make_app(root)
+    app.template_var.set(str(tmp_path / "missing.txt"))
+
+    app._refresh_preview()
+
+    assert " ".join(card_texts(app)) == "Choose a message template to see a card preview."
+
+
+def test_preview_includes_the_background_image(root, inputs, tmp_path):
+    from PIL import Image
+
+    background = tmp_path / "bg.png"
+    Image.new("RGB", (300, 300), (0, 90, 160)).save(background)
+    app = make_app(root, inputs)
+    app.bg_var.set(str(background))
+
+    app._refresh_preview()
+
+    kinds = {app.preview.canvas.type(item) for item in app.preview.canvas.find_all()}
+    assert "image" in kinds
+
+
+def test_sample_code_uses_the_first_code_in_the_file(root, inputs):
+    app = make_app(root, inputs)
+
+    assert app.sample_code() == "AAAA1111"
+
+
+def test_sample_code_falls_back_when_there_is_no_file(root, tmp_path):
+    app = make_app(root)
+    app.csv_var.set(str(tmp_path / "missing.csv"))
+
+    assert app.sample_code() == PLACEHOLDER_CODE
+
+
+def test_sample_code_ignores_headers_and_comments(root, tmp_path):
+    csv_path = tmp_path / "codes.csv"
+    csv_path.write_text("code\n# note\n\nZZZZ9999\n", encoding="utf-8")
+    app = make_app(root)
+    app.csv_var.set(str(csv_path))
+
+    assert app.sample_code() == "ZZZZ9999"
+
+
+def test_preview_refreshes_when_the_template_changes(root, inputs, tmp_path):
+    app = make_app(root, inputs)
+    other = tmp_path / "other.txt"
+    other.write_text("Hello ${CODE}", encoding="utf-8")
+
+    app.template_var.set(str(other))
+    assert pump(root, lambda: card_texts(app) == ["Hello AAAA1111"], timeout=5)
 
 
 def test_summary_variants():

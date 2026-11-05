@@ -24,7 +24,7 @@ Linux.
 The desktop UI after a run (the codes shown are fake):
 
 ![The GocaTools window: code file, template, expiry, cards folder, PDF output and background
-picker above a live log and status bar](docs/ui.png)
+picker, a card preview, and a live log with a status bar](docs/ui.png)
 
 The generated PDF — 10 cards per page on US Letter, with an optional background image:
 
@@ -46,12 +46,18 @@ The launcher creates a private `.venv` folder next to the scripts, installs the 
 first run, and then opens the window.
 
 The window has three numbered sections — **1 · Redemption codes**, **2 · Printable PDF**, and a live
-**Log** with a progress bar:
+**Log** with a progress bar — plus a **Preview** of a single card beside the log:
 
 - **Generate cards only** — writes `<cards folder>/<CODE>/message.txt` and `QR.png` for every code,
   emptying the cards folder first.
 - **Build PDF only** — lays out whatever is already in the cards folder.
 - **Generate + Build PDF** — does both in one go (probably what you want).
+
+Tick **Open the PDF when finished** and the PDF opens in your usual viewer as soon as it is written.
+
+The **Preview** redraws as you edit the template, expiry date or background — same fractions,
+padding and font size the PDF uses, so you can see line breaks and any text that gets trimmed
+*before* you print.
 
 ## Using the UI
 
@@ -62,9 +68,13 @@ The window has three numbered sections — **1 · Redemption codes**, **2 · Pri
 3. **Expiry date** — free text substituted into `${EXPIRY}`, e.g. `July 31st 2026`.
 4. **Cards folder** — where the per-code folders are created (default `./output`). It is **emptied
    at the start of every run**, so the PDF only ever contains the codes you just generated.
-5. **PDF output** — where the finished PDF is written (default `./cards.pdf`).
+5. **PDF output** — where the finished PDF is written (default `./cards.pdf`). The checkbox below
+   it opens the PDF in your default viewer once the run finishes.
 6. **Background image** — *optional*; centred and cropped to fill each card. If a file named
    `background.png` / `background.jpg` sits next to the scripts it is picked automatically.
+
+The **Preview** panel shows the first code from your codes file rendered on one card, so you can
+check the wording, the expiry text and the background before generating everything.
 
 ## Command line usage
 
@@ -134,6 +144,7 @@ goca/                    the application
   codes.py               reading code lists, rendering messages, QR images
   generator.py           one folder per code (message.txt + QR.png)
   pdf.py                 business-card PDF layout
+  preview.py             on-screen card preview (mirrors the PDF layout)
   gui.py                 tkinter UI
 pokemon.py               CLI wrapper for step 1
 createpdf.py             CLI wrapper for step 2
@@ -147,8 +158,8 @@ tests/                   pytest suite
 python -m pytest
 ```
 
-The suite covers parsing, generation, PDF pagination, both CLIs and a tkinter smoke test (skipped
-automatically when no display is available).
+The suite covers parsing, generation, PDF pagination, the card preview, both CLIs and the UI
+(UI tests are skipped automatically when no display is available).
 
 ## Keep your codes private
 

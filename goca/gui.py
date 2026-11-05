@@ -11,12 +11,16 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from . import ROOT, __version__
-from .codes import DEFAULT_EXPIRY, GocaError
+from .codes import DEFAULT_EXPIRY, GocaError, load_codes, load_template, render_message
 from .generator import process_codes
 from .pdf import build_pdf, find_default_background
+from .preview import EMPTY_HINT, CardPreview
 
 APP_NAME = "GocaTools"
 PAD = 10
+PREVIEW_WIDTH = 380
+PLACEHOLDER_CODE = "SAMPLECODE1234"
+PREVIEW_DELAY_MS = 250
 
 CSV_TYPES = [("Code lists", "*.csv *.txt"), ("All files", "*.*")]
 TEMPLATE_TYPES = [("Text files", "*.txt"), ("All files", "*.*")]
@@ -36,8 +40,8 @@ def _enable_dpi_awareness() -> None:
         pass
 
 
-def _open_folder(path: str) -> None:
-    """Reveal *path* in the platform file manager."""
+def _open_path(path: str) -> None:
+    """Open *path* with the platform's default handler."""
     if sys.platform == "win32":
         os.startfile(path)  # type: ignore[attr-defined]
     elif sys.platform == "darwin":
@@ -61,13 +65,20 @@ class GocaApp(ttk.Frame):
         self.outdir_var = tk.StringVar(value=os.path.join(ROOT, "output"))
         self.pdf_var = tk.StringVar(value=os.path.join(ROOT, "cards.pdf"))
         self.bg_var = tk.StringVar(value=find_default_background(ROOT) or "")
+        self.open_pdf_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Ready.")
+
+        self._preview_id: str | None = None
+        self._sample_cache: tuple[tuple, str] | None = None
 
         self._build_widgets()
         self._append_log(
             f"{APP_NAME} {__version__} ready. Choose your files, then press "
             "'Generate + Build PDF'."
         )
+        for var in (self.csv_var, self.template_var, self.expiry_var, self.bg_var):
+            var.trace_add("write", self._on_preview_input)
+        self._schedule_preview()
         self.bind("<Destroy>", self._on_destroy)
         self._poll_id = self.after(100, self._poll)
         self.csv_entry.focus_set()
@@ -112,13 +123,29 @@ class GocaApp(ttk.Frame):
 
         row = 0
         _, row = self._path_row(target, row, "PDF output:", self.pdf_var, "save", PDF_TYPES)
+        ttk.Checkbutton(
+            target,
+            text="Open the PDF when finished",
+            variable=self.open_pdf_var,
+        ).grid(row=row, column=1, sticky="w", pady=(0, 4))
+        row += 1
         self._path_row(
             target, row, "Background image:", self.bg_var, "open", IMAGE_TYPES,
             hint="optional, centred behind each card", clear=True,
         )
 
-        log_frame = ttk.LabelFrame(self, text="Log", padding=(PAD, PAD, PAD, 0))
-        log_frame.grid(row=2, column=0, sticky="nsew", pady=(PAD, 0))
+        bottom = ttk.Frame(self)
+        bottom.grid(row=2, column=0, sticky="nsew", pady=(PAD, 0))
+        bottom.columnconfigure(1, weight=1)
+        bottom.rowconfigure(0, weight=1)
+
+        preview_frame = ttk.LabelFrame(bottom, text="Preview", padding=PAD)
+        preview_frame.grid(row=0, column=0, sticky="n")
+        self.preview = CardPreview(preview_frame, width=PREVIEW_WIDTH)
+        self.preview.pack()
+
+        log_frame = ttk.LabelFrame(bottom, text="Log", padding=(PAD, PAD, PAD, 0))
+        log_frame.grid(row=0, column=1, sticky="nsew", padx=(PAD, 0))
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
 
@@ -130,10 +157,13 @@ class GocaApp(ttk.Frame):
         self.log_text.grid(row=0, column=0, sticky="nsew")
         scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
         scroll.grid(row=0, column=1, sticky="ns")
-        self.log_text.configure(yscrollcommand=scroll.set)
+
+        hscroll = ttk.Scrollbar(log_frame, orient="horizontal", command=self.log_text.xview)
+        hscroll.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self.log_text.configure(yscrollcommand=scroll.set, xscrollcommand=hscroll.set)
 
         self.progress = ttk.Progressbar(log_frame, mode="determinate", maximum=100, value=0)
-        self.progress.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.progress.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
         actions = ttk.Frame(self)
         actions.grid(row=3, column=0, sticky="ew", pady=(PAD, 0))
@@ -211,6 +241,66 @@ class GocaApp(ttk.Frame):
         if chosen:
             var.set(os.path.normpath(chosen))
 
+    # ── preview ──────────────────────────────────────────────────────────────
+    def _on_preview_input(self, *_args) -> None:
+        self._schedule_preview()
+
+    def _schedule_preview(self) -> None:
+        """Debounce preview refreshes while the user is typing in a field."""
+        if self._preview_id is not None:
+            try:
+                self.after_cancel(self._preview_id)
+            except tk.TclError:
+                pass
+        self._preview_id = self.after(PREVIEW_DELAY_MS, self._refresh_preview)
+
+    def _refresh_preview(self) -> None:
+        self._preview_id = None
+        template_path = self.template_var.get().strip()
+
+        try:
+            template = load_template(template_path) if template_path else None
+        except GocaError:
+            template = None
+
+        if not template:
+            self.preview.show_message(EMPTY_HINT)
+            return
+
+        code = self.sample_code()
+        expiry = self.expiry_var.get().strip() or DEFAULT_EXPIRY
+        lines = render_message(template, code, expiry).splitlines()
+        while lines and not lines[-1].strip():
+            lines.pop()
+
+        background = self.bg_var.get().strip() or None
+        self.preview.show(code, lines, background)
+
+    def sample_code(self) -> str:
+        """First code from the codes file, or a placeholder when there is none."""
+        path = self.csv_var.get().strip()
+        if not path or not os.path.isfile(path):
+            return PLACEHOLDER_CODE
+
+        try:
+            stat = os.stat(path)
+        except OSError:
+            return PLACEHOLDER_CODE
+
+        key = (path, stat.st_mtime_ns, stat.st_size)
+        if self._sample_cache and self._sample_cache[0] == key:
+            return self._sample_cache[1]
+
+        # Parsed exactly like a real run, so headers and comments behave the same.
+        try:
+            codes = load_codes(path)
+        except GocaError:
+            codes = []
+
+        code = codes[0] if codes else PLACEHOLDER_CODE
+        self._sample_cache = (key, code)
+        return code
+
     # ── actions ──────────────────────────────────────────────────────────────
     def _read_settings(self) -> dict:
         """Snapshot the form values (main thread only - worker must not touch Tk)."""
@@ -221,6 +311,7 @@ class GocaApp(ttk.Frame):
             "outdir": self.outdir_var.get().strip() or os.path.join(ROOT, "output"),
             "pdf": self.pdf_var.get().strip() or os.path.join(ROOT, "cards.pdf"),
             "bg": self.bg_var.get().strip() or None,
+            "open_pdf": bool(self.open_pdf_var.get()),
         }
 
     def _generate(self, settings: dict) -> dict:
@@ -234,7 +325,10 @@ class GocaApp(ttk.Frame):
         )
 
     def _build(self, settings: dict) -> int:
-        return build_pdf(settings["outdir"], settings["pdf"], settings["bg"], log=self._log)
+        count = build_pdf(settings["outdir"], settings["pdf"], settings["bg"], log=self._log)
+        if count and settings.get("open_pdf") and os.path.isfile(settings["pdf"]):
+            self._queue.put(("open", settings["pdf"]))
+        return count
 
     def _validate_generate(self, settings: dict) -> str | None:
         if not settings["csv"]:
@@ -282,7 +376,15 @@ class GocaApp(ttk.Frame):
         if not os.path.isdir(path):
             messagebox.showwarning(APP_NAME, f"Folder not found yet:\n{path}", parent=self)
             return
-        _open_folder(path)
+        _open_path(path)
+
+    def _open_pdf(self, path: str) -> None:
+        try:
+            _open_path(path)
+        except OSError as exc:
+            self._append_log(f"Could not open the PDF: {exc}")
+            return
+        self._append_log(f"Opened {path}")
 
     # ── worker plumbing ──────────────────────────────────────────────────────
     def _log(self, message: str) -> None:
@@ -321,19 +423,25 @@ class GocaApp(ttk.Frame):
                     messagebox.showerror(APP_NAME, payload, parent=self)
                 elif kind == "done":
                     self._set_busy(False, self._summary(payload))
+                elif kind == "open":
+                    self._open_pdf(payload)
         except queue.Empty:
             pass
         self._poll_id = self.after(80, self._poll)
 
     def _on_destroy(self, event: tk.Event) -> None:
-        """Stop the poll loop so the widget can be collected with its interpreter."""
-        if event.widget is not self or self._poll_id is None:
+        """Stop pending callbacks so the widget can go with its interpreter."""
+        if event.widget is not self:
             return
-        try:
-            self.after_cancel(self._poll_id)
-        except tk.TclError:
-            pass
-        self._poll_id = None
+        for attr in ("_poll_id", "_preview_id"):
+            handle = getattr(self, attr, None)
+            if handle is None:
+                continue
+            try:
+                self.after_cancel(handle)
+            except tk.TclError:
+                pass
+            setattr(self, attr, None)
 
     @staticmethod
     def _summary(results) -> str:
@@ -407,8 +515,12 @@ def main() -> None:
     # Sizes below are logical pixels; scale them so the window matches the display DPI.
     scale = max(root.winfo_fpixels("1i") / 96.0, 1.0)
     width = int(min(880 * scale, root.winfo_screenwidth() - 80))
-    height = int(min(720 * scale, root.winfo_screenheight() - 120))
-    root.minsize(min(int(700 * scale), width), min(int(560 * scale), height))
+    height = int(min(760 * scale, root.winfo_screenheight() - 120))
+    # Never let the window shrink below what the widgets need.
+    root.minsize(
+        min(app.winfo_reqwidth(), width),
+        min(app.winfo_reqheight(), height),
+    )
 
     x = max((root.winfo_screenwidth() - width) // 2, 0)
     y = max((root.winfo_screenheight() - height) // 3, 0)
