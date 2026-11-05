@@ -17,24 +17,10 @@ Linux.
 > **Not affiliated with Nintendo, The Pokémon Company or Niantic.** Only generate cards for codes
 > you are entitled to distribute.
 
----
-
-## Screenshots
-
-The desktop UI after a run (the codes shown are fake):
-
-![The GocaTools window: code file, template, expiry, cards folder, PDF output and background
-picker, a card preview, and a live log with a status bar](docs/ui.png)
-
-The generated PDF — 10 cards per page on US Letter, with an optional background image:
-
-![A printed page of ten 3.5 x 2 inch cards, each with the message on the left and a QR code on the
-right, over a blue gradient background](docs/sample-cards.jpg)
-
 ## Quick start
 
-1. Install [Python 3.9+](https://www.python.org/downloads/) (on Windows, tick
-   *"Add python.exe to PATH"* during setup).
+1. Install [Python 3.9+](https://www.python.org/downloads/) — or let the quickstart script do it
+   for you (see below).
 2. Launch the app:
 
    | Platform | Command |
@@ -44,6 +30,19 @@ right, over a blue gradient background](docs/sample-cards.jpg)
 
 The launcher creates a private `.venv` folder next to the scripts, installs the two dependencies on
 first run, and then opens the window.
+
+### Windows: no Python yet?
+
+Right-click **`_quickstart.ps1`** and choose *Run with PowerShell*, or run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\_quickstart.ps1
+```
+
+It checks for Python 3.9+ with tkinter, installs a per-user copy of Python 3.12 when none is found
+(via winget, or the official python.org installer verified against a pinned SHA-256), then hands
+over to `launch.bat`. No administrator rights are needed. Add `-NoLaunch` to set up Python without
+opening the UI, or `-WhatIf` to see what it would do.
 
 The window has three numbered sections — **1 · Redemption codes**, **2 · Printable PDF**, and a live
 **Log** with a progress bar — plus a **Preview** of a single card beside the log:
@@ -75,6 +74,9 @@ padding and font size the PDF uses, so you can see line breaks and any text that
 
 The **Preview** panel shows the first code from your codes file rendered on one card, so you can
 check the wording, the expiry text and the background before generating everything.
+
+![The GocaTools window: code file, template, expiry, cards folder, PDF output and background
+picker, a card preview, and a live log with a status bar](docs/ui.png)
 
 ## Command line usage
 
@@ -139,6 +141,7 @@ pip install "qrcode[pil]" reportlab
 ## Project layout
 
 ```
+_quickstart.ps1          Windows helper: install Python if needed, then run launch.bat
 launch.bat / launch.sh   one-click launchers (create .venv, install deps, open the UI)
 goca/                    the application
   codes.py               reading code lists, rendering messages, QR images
@@ -172,7 +175,9 @@ and keep it out of the repository.
 
 | Symptom | Fix |
 | --- | --- |
-| `python` opens the Microsoft Store (Windows) | The Store alias is shadowing Python. Install from python.org or disable *App execution aliases* for `python.exe`. The launcher also searches `%LOCALAPPDATA%\Programs\Python`. |
+| No Python installed (Windows) | Run `_quickstart.ps1` — it installs a per-user Python 3.12 and then launches the app. |
+| `python` opens the Microsoft Store (Windows) | The Store alias is shadowing Python. Run `_quickstart.ps1`, install from python.org, or disable *App execution aliases* for `python.exe`. The launcher also searches `%LOCALAPPDATA%\Programs\Python`. |
+| `_quickstart.ps1` will not run | Windows blocks unsigned scripts by double-click; use `powershell -ExecutionPolicy Bypass -File .\_quickstart.ps1`, or right-click the file and choose *Run with PowerShell*. |
 | `ModuleNotFoundError: tkinter` (Linux) | `sudo apt install python3-tk` (Debian/Ubuntu) or `sudo dnf install python3-tkinter` (Fedora); macOS: `brew install python-tk`. |
 | QR code will not scan | Print at actual size on a laser/inkjet printer; avoid scaling to "fit page". |
 | Codes look truncated on the card | Shorten the template lines — they are trimmed to the card width. |

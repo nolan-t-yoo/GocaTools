@@ -19,7 +19,9 @@ if not defined PY (
 )
 if not defined PY (
     echo [ERROR] Python 3 was not found on this computer.
-    echo         Install it from https://www.python.org/downloads/ and tick
+    echo         Easiest fix: right-click _quickstart.ps1 and choose
+    echo         "Run with PowerShell" - it installs Python for you.
+    echo         Or install it from https://www.python.org/downloads/ and tick
     echo         "Add python.exe to PATH" during setup, then run this again.
     goto :fail
 )
