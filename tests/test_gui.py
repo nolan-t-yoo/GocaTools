@@ -1,6 +1,8 @@
 """Tests for the tkinter UI (skipped when no display is available)."""
 
 import os
+import shutil
+import stat
 import time
 
 import pytest
@@ -437,6 +439,81 @@ def test_unwritable_temp_dir_reports_an_error(root, tmp_path, monkeypatch, no_si
     assert no_side_effects and no_side_effects[0][0] == "error"
     assert "Could not create a temporary codes file" in no_side_effects[0][2]
     assert app.csv_var.get() == before
+
+
+# ── tidying scratch files on exit ────────────────────────────────────────────
+def test_closing_the_window_deletes_its_temp_files(root, temp_root):
+    scratch, _ = temp_root
+    app = make_app(root)
+    app._on_new_temp_codes()
+    path = app.csv_var.get()
+    assert os.path.isfile(path)
+
+    app.destroy()
+
+    assert not os.path.exists(path)
+    assert not os.path.exists(os.path.dirname(path))
+    assert not scratch.exists(), "the empty GocaTools temp folder should go too"
+
+
+def test_closing_removes_every_file_from_this_window(root, temp_root):
+    app = make_app(root)
+    app._on_new_temp_codes()
+    app._on_new_temp_codes()
+    paths = list(app._temp_sessions)
+
+    app.destroy()
+
+    assert len(paths) == 2
+    assert all(not os.path.exists(p) for p in paths)
+
+
+def test_closing_leaves_other_windows_files_alone(root, temp_root):
+    scratch, _ = temp_root
+    other = scratch / "session-from-another-window"
+    other.mkdir(parents=True)
+    (other / "codes.csv").write_text("AAAA1111\n", encoding="utf-8")
+
+    app = make_app(root)
+    app._on_new_temp_codes()
+
+    app.destroy()
+
+    assert (other / "codes.csv").is_file()
+
+
+def test_cleanup_tolerates_files_already_removed(root, temp_root):
+    app = make_app(root)
+    app._on_new_temp_codes()
+    path = app.csv_var.get()
+    shutil.rmtree(os.path.dirname(path))
+
+    app.destroy()  # must not raise
+
+    assert not os.path.exists(path)
+
+
+def test_cleanup_is_only_run_once(root, temp_root):
+    app = make_app(root)
+    app._on_new_temp_codes()
+    app._cleanup_temp_sessions()
+
+    assert app._temp_sessions == []
+
+    app.destroy()  # second pass is a no-op
+    assert app._temp_sessions == []
+
+
+def test_remove_tree_clears_read_only_files(tmp_path):
+    folder = tmp_path / "session"
+    folder.mkdir()
+    target = folder / "codes.csv"
+    target.write_text("AAAA1111", encoding="utf-8")
+    os.chmod(target, stat.S_IREAD)
+
+    gui._remove_tree(str(folder))
+
+    assert not folder.exists()
 
 
 def test_summary_variants():

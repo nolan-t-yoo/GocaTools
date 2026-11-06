@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import queue
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -80,6 +82,21 @@ def _temp_codes_dir() -> str:
     return os.path.join(tempfile.gettempdir(), APP_NAME)
 
 
+def _remove_tree(folder: str) -> None:
+    """Delete *folder*, retrying read-only files that an editor left behind."""
+    shutil.rmtree(folder, ignore_errors=True)
+    if not os.path.exists(folder):
+        return
+
+    for parent, _dirs, names in os.walk(folder):
+        for name in names:
+            try:
+                os.chmod(os.path.join(parent, name), stat.S_IWRITE)
+            except OSError:
+                pass
+    shutil.rmtree(folder, ignore_errors=True)
+
+
 class GocaApp(ttk.Frame):
     """Two-step workflow: generate card data, then build the printable PDF."""
 
@@ -100,6 +117,7 @@ class GocaApp(ttk.Frame):
 
         self._preview_id: str | None = None
         self._sample_cache: tuple[tuple, str] | None = None
+        self._temp_sessions: list[str] = []
 
         self._build_widgets()
         self._append_log(
@@ -419,6 +437,8 @@ class GocaApp(ttk.Frame):
             os.makedirs(root, exist_ok=True)
             # mkdtemp keeps two clicks in the same second from sharing a file.
             folder = tempfile.mkdtemp(prefix=f"session-{datetime.now():%Y%m%d-%H%M%S}-", dir=root)
+            # Remembered first, so a half-written file is still tidied on exit.
+            self._temp_sessions.append(folder)
             path = os.path.join(folder, "codes.csv")
             with open(path, "w", encoding="utf-8", newline="") as f:
                 f.write(TEMP_CODES_HEADER)
@@ -437,6 +457,24 @@ class GocaApp(ttk.Frame):
             self._append_log(f"Could not open the editor, paste into it manually: {exc}")
         else:
             self._append_log("Paste your codes, save the file, then press Generate + Build PDF.")
+
+    def _cleanup_temp_sessions(self) -> None:
+        """Delete the scratch code files this window created.
+
+        Best effort: an editor may still hold a file open, in which case the
+        folder stays behind and the next clean-up or Windows will get it.
+        """
+        sessions, self._temp_sessions = self._temp_sessions, []
+        for folder in sessions:
+            _remove_tree(folder)
+
+        if not sessions:
+            return
+        try:
+            # Only succeeds once no other window still has files in there.
+            os.rmdir(_temp_codes_dir())
+        except OSError:
+            pass
 
     def _open_pdf(self, path: str) -> None:
         try:
@@ -490,7 +528,7 @@ class GocaApp(ttk.Frame):
         self._poll_id = self.after(80, self._poll)
 
     def _on_destroy(self, event: tk.Event) -> None:
-        """Stop pending callbacks so the widget can go with its interpreter."""
+        """Stop pending callbacks and tidy scratch files when the window closes."""
         if event.widget is not self:
             return
         for attr in ("_poll_id", "_preview_id"):
@@ -502,6 +540,7 @@ class GocaApp(ttk.Frame):
             except tk.TclError:
                 pass
             setattr(self, attr, None)
+        self._cleanup_temp_sessions()
 
     @staticmethod
     def _summary(results) -> str:
