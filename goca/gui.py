@@ -6,8 +6,11 @@ import os
 import queue
 import subprocess
 import sys
+import tempfile
 import threading
 import tkinter as tk
+from collections.abc import Callable
+from datetime import datetime
 from tkinter import filedialog, messagebox, ttk
 
 from . import ROOT, __version__
@@ -21,6 +24,13 @@ PAD = 10
 PREVIEW_WIDTH = 380
 PLACEHOLDER_CODE = "SAMPLECODE1234"
 PREVIEW_DELAY_MS = 250
+
+# Written at the top of a scratch code list. Deliberately free of commas: each
+# CSV cell is checked for codes separately, so "a, b" would parse as a code.
+TEMP_CODES_HEADER = (
+    "# Paste your redemption codes below - one per line.\n"
+    "# Save this file (Ctrl+S) then press Generate + Build PDF.\n"
+)
 
 CSV_TYPES = [("Code lists", "*.csv *.txt"), ("All files", "*.*")]
 TEMPLATE_TYPES = [("Text files", "*.txt"), ("All files", "*.*")]
@@ -48,6 +58,26 @@ def _open_path(path: str) -> None:
         subprocess.Popen(["open", path])
     else:
         subprocess.Popen(["xdg-open", path])
+
+
+def _open_in_editor(path: str) -> None:
+    """Open *path* in a plain-text editor.
+
+    Notepad is named explicitly on Windows: a .csv is usually associated with
+    Excel, which fights the paste-one-code-per-line workflow.
+    """
+    if sys.platform == "win32":
+        try:
+            subprocess.Popen(["notepad.exe", path])
+            return
+        except OSError:
+            pass
+    _open_path(path)
+
+
+def _temp_codes_dir() -> str:
+    """Root folder for scratch code lists, inside the system temp directory."""
+    return os.path.join(tempfile.gettempdir(), APP_NAME)
 
 
 class GocaApp(ttk.Frame):
@@ -101,6 +131,7 @@ class GocaApp(ttk.Frame):
         self.csv_entry, row = self._path_row(
             source, row, "Codes file:", self.csv_var, "open", CSV_TYPES,
             hint="CSV or TXT - one code per cell or line",
+            extra=[("Temp", self._on_new_temp_codes)],
         )
         _, row = self._path_row(
             source, row, "Message template:", self.template_var, "open", TEMPLATE_TYPES,
@@ -191,6 +222,7 @@ class GocaApp(ttk.Frame):
         filetypes: list[tuple[str, str]] | None,
         hint: str = "",
         clear: bool = False,
+        extra: list[tuple[str, Callable[[], None]]] | None = None,
     ) -> tuple[ttk.Entry, int]:
         """Add a labelled path field; return the entry and the next free row."""
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, PAD), pady=4)
@@ -205,6 +237,8 @@ class GocaApp(ttk.Frame):
         ).pack(side="left")
         if clear:
             ttk.Button(buttons, text="Clear", width=7, command=lambda: var.set("")).pack(side="left", padx=(4, 0))
+        for text, command in extra or []:
+            ttk.Button(buttons, text=text, width=7, command=command).pack(side="left", padx=(4, 0))
 
         if not hint:
             return entry, row + 1
@@ -377,6 +411,32 @@ class GocaApp(ttk.Frame):
             messagebox.showwarning(APP_NAME, f"Folder not found yet:\n{path}", parent=self)
             return
         _open_path(path)
+
+    def _on_new_temp_codes(self) -> None:
+        """Create an empty scratch codes file and open it for pasting."""
+        root = _temp_codes_dir()
+        try:
+            os.makedirs(root, exist_ok=True)
+            # mkdtemp keeps two clicks in the same second from sharing a file.
+            folder = tempfile.mkdtemp(prefix=f"session-{datetime.now():%Y%m%d-%H%M%S}-", dir=root)
+            path = os.path.join(folder, "codes.csv")
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(TEMP_CODES_HEADER)
+        except OSError as exc:
+            messagebox.showerror(
+                APP_NAME, f"Could not create a temporary codes file:\n{exc}", parent=self
+            )
+            return
+
+        self.csv_var.set(path)
+        self._append_log(f"Created temporary codes file: {path}")
+
+        try:
+            _open_in_editor(path)
+        except OSError as exc:
+            self._append_log(f"Could not open the editor, paste into it manually: {exc}")
+        else:
+            self._append_log("Paste your codes, save the file, then press Generate + Build PDF.")
 
     def _open_pdf(self, path: str) -> None:
         try:

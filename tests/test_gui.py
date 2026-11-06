@@ -1,10 +1,12 @@
 """Tests for the tkinter UI (skipped when no display is available)."""
 
+import os
 import time
 
 import pytest
 
 from goca import gui
+from goca.codes import load_codes
 from goca.gui import PLACEHOLDER_CODE, GocaApp
 
 
@@ -329,6 +331,112 @@ def test_preview_refreshes_when_the_template_changes(root, inputs, tmp_path):
 
     app.template_var.set(str(other))
     assert pump(root, lambda: card_texts(app) == ["Hello AAAA1111"], timeout=5)
+
+
+# ── temporary codes file ─────────────────────────────────────────────────────
+@pytest.fixture()
+def temp_root(tmp_path, monkeypatch):
+    """Point the scratch folder at a test directory and stub the editor."""
+    root = tmp_path / "scratch"
+    opened = []
+    monkeypatch.setattr(gui, "_temp_codes_dir", lambda: str(root))
+    monkeypatch.setattr(gui, "_open_in_editor", opened.append)
+    return root, opened
+
+
+def test_temp_button_creates_codes_file_and_selects_it(root, temp_root):
+    scratch, opened = temp_root
+    app = make_app(root)
+
+    app._on_new_temp_codes()
+
+    path = app.csv_var.get()
+    assert os.path.isfile(path)
+    assert os.path.basename(path) == "codes.csv"
+    assert path.startswith(str(scratch))
+    assert opened == [path]
+
+
+def test_temp_file_header_is_not_mistaken_for_codes(root, temp_root):
+    """The guidance header must parse to zero codes, commas included."""
+    app = make_app(root)
+
+    app._on_new_temp_codes()
+
+    assert load_codes(app.csv_var.get()) == []
+    assert app.sample_code() == PLACEHOLDER_CODE
+
+
+def test_pasted_codes_are_picked_up_after_saving(root, temp_root, inputs):
+    app = make_app(root, inputs)
+
+    app._on_new_temp_codes()
+    with open(app.csv_var.get(), "a", encoding="utf-8") as f:
+        f.write("AAAA1111\nBBBB2222\n")
+
+    assert load_codes(app.csv_var.get()) == ["AAAA1111", "BBBB2222"]
+    assert app.sample_code() == "AAAA1111"
+
+    summary = app._generate(app._read_settings())
+
+    assert summary["written"] == 2
+    assert (inputs["out"] / "AAAA1111" / "message.txt").is_file()
+
+
+def test_each_click_gets_a_fresh_file(root, temp_root):
+    _, opened = temp_root
+    app = make_app(root)
+
+    app._on_new_temp_codes()
+    first = app.csv_var.get()
+    with open(first, "a", encoding="utf-8") as f:
+        f.write("AAAA1111\n")
+
+    app._on_new_temp_codes()
+    second = app.csv_var.get()
+
+    assert first != second
+    assert os.path.isfile(first), "the earlier list must not be overwritten"
+    assert load_codes(first) == ["AAAA1111"]
+    assert load_codes(second) == []
+    assert opened == [first, second]
+
+
+def test_temp_file_is_logged_with_its_path(root, temp_root):
+    app = make_app(root)
+
+    app._on_new_temp_codes()
+
+    log = app.log_text.get("1.0", "end")
+    assert f"Created temporary codes file: {app.csv_var.get()}" in log
+    assert "Paste your codes, save the file" in log
+
+
+def test_editor_failure_is_logged_and_path_still_selected(root, temp_root, monkeypatch):
+    def boom(path):
+        raise OSError("no editor")
+
+    monkeypatch.setattr(gui, "_open_in_editor", boom)
+    app = make_app(root)
+
+    app._on_new_temp_codes()
+
+    assert os.path.isfile(app.csv_var.get())
+    assert "Could not open the editor" in app.log_text.get("1.0", "end")
+
+
+def test_unwritable_temp_dir_reports_an_error(root, tmp_path, monkeypatch, no_side_effects):
+    blocker = tmp_path / "not-a-folder"
+    blocker.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(gui, "_temp_codes_dir", lambda: str(blocker))
+    app = make_app(root)
+    before = app.csv_var.get()
+
+    app._on_new_temp_codes()
+
+    assert no_side_effects and no_side_effects[0][0] == "error"
+    assert "Could not create a temporary codes file" in no_side_effects[0][2]
+    assert app.csv_var.get() == before
 
 
 def test_summary_variants():

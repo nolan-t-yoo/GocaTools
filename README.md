@@ -63,6 +63,10 @@ padding and font size the PDF uses, so you can see line breaks and any text that
 1. **Codes file** — a `.csv` or `.txt` with one code per cell or per line. Commas, multiple rows,
    quoted multi-line cells, blank lines and `#` comments are all handled. A first cell like
    `code`/`passcode` is treated as a header and skipped.
+   Press **Temp** to skip the file hunt entirely: it creates an empty `codes.csv` in your temp
+   folder, opens it in Notepad (rather than Excel, which a `.csv` usually defaults to) and points
+   the field at it. Paste the codes straight from the email, press <kbd>Ctrl</kbd>+<kbd>S</kbd>,
+   then generate. Each press makes a fresh file, so an earlier paste is never overwritten.
 2. **Message template** — see [Template variables](#template-variables).
 3. **Expiry date** — free text substituted into `${EXPIRY}`, e.g. `July 31st 2026`.
 4. **Cards folder** — where the per-code folders are created (default `./output`). It is **emptied
