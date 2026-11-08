@@ -1,6 +1,5 @@
-Code:
-${CODE}
-Expires:
-${EXPIRY}
+Code: ${CODE}
+Expires: ${EXPIRY}
 Scan the QR code for goodies!
 Thanks for coming!
+- From Nolan@Bellevue Park

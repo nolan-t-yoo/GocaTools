@@ -18,6 +18,8 @@ from .pdf import (
     FONT_SIZE,
     LINE_SPACING,
     MSG_FRAC,
+    NUMBER_BOX_PAD,
+    NUMBER_BOX_RADIUS,
     NUMBER_FONT_SIZE,
     PADDING,
     QR_FRAC,
@@ -218,10 +220,12 @@ class CardPreview(ttk.Frame):
         )
         if label is not None:
             label_font, label_x, label_y, label_w = label
+            scale = self._width / CARD_W
+            box_pad = NUMBER_BOX_PAD * scale
             half_h = label_font.metrics("linespace") / 2
             draw.rounded_rectangle(
-                [label_x - label_w / 2 - 3, label_y - half_h, label_x + label_w / 2 + 3, label_y + half_h],
-                radius=2,
+                [label_x - label_w / 2 - box_pad, label_y - half_h, label_x + label_w / 2 + box_pad, label_y + half_h],
+                radius=round(NUMBER_BOX_RADIUS * scale),
                 fill=(255, 255, 255, round(BOX_ALPHA * 255)),
             )
         composed = Image.alpha_composite(card, overlay).convert("RGB")

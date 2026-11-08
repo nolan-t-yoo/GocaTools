@@ -580,3 +580,13 @@ def test_summary_variants():
     assert GocaApp._summary([3]) == "Finished: 3 cards -> PDF."
     assert GocaApp._summary([0]) == "Finished: no cards found."
     assert GocaApp._summary([]) == "Finished."
+
+
+def test_sample_codes_count_matches_the_cards_a_run_would_make(root, tmp_path):
+    csv_path = tmp_path / "codes.csv"
+    # One duplicate and one code that generation skips: only two cards get made.
+    csv_path.write_text("AAAA1111,AAAA1111,BBBB2222,BAD/CODE", encoding="utf-8")
+    app = make_app(root)
+    app.csv_var.set(str(csv_path))
+
+    assert app.sample_codes() == ("AAAA1111", 2)

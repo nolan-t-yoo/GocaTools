@@ -16,7 +16,14 @@ from datetime import datetime
 from tkinter import filedialog, messagebox, ttk
 
 from . import ROOT, __version__
-from .codes import DEFAULT_EXPIRY, GocaError, load_codes, load_template, render_message
+from .codes import (
+    DEFAULT_EXPIRY,
+    GocaError,
+    is_safe_dir_name,
+    load_codes,
+    load_template,
+    render_message,
+)
 from .generator import process_codes
 from .pdf import build_pdf, card_number_label, find_default_background
 from .preview import EMPTY_HINT, CardPreview
@@ -341,9 +348,11 @@ class GocaApp(ttk.Frame):
         return self.sample_codes()[0]
 
     def sample_codes(self) -> tuple[str, int]:
-        """``(first code, how many codes)`` from the codes file.
+        """``(first code, how many cards)`` from the codes file.
 
-        Falls back to ``(PLACEHOLDER_CODE, 1)`` when the file is missing or empty.
+        The count matches what a run would produce: duplicates collapse into one
+        card folder and codes with unsafe characters are skipped. Falls back to
+        ``(PLACEHOLDER_CODE, 1)`` when the file is missing or empty.
         """
         fallback = (PLACEHOLDER_CODE, 1)
         path = self.csv_var.get().strip()
@@ -365,7 +374,11 @@ class GocaApp(ttk.Frame):
         except GocaError:
             codes = []
 
-        sample = (codes[0], len(codes)) if codes else fallback
+        if codes:
+            cards = {code for code in codes if is_safe_dir_name(code)}
+            sample = (codes[0], max(len(cards), 1))
+        else:
+            sample = fallback
         self._sample_cache = (key, sample)
         return sample
 

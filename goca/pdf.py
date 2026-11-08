@@ -32,6 +32,8 @@ LINE_SPACING = FONT_SIZE * 1.4
 
 # Optional "[n/total]" label centred below the QR code
 NUMBER_FONT_SIZE = 7.0
+NUMBER_BOX_PAD = 3.0     # white backing extends this far past the text
+NUMBER_BOX_RADIUS = 2.0
 
 CARDS_PER_PAGE = COLS * ROWS
 
@@ -153,11 +155,11 @@ def draw_card(
         c.saveState()
         c.setFillColorRGB(1, 1, 1, alpha=0.75)
         c.roundRect(
-            label_x - label_w / 2 - 3,
+            label_x - label_w / 2 - NUMBER_BOX_PAD,
             label_y - NUMBER_FONT_SIZE * 0.3,
-            label_w + 6,
+            label_w + NUMBER_BOX_PAD * 2,
             NUMBER_FONT_SIZE * 1.3,
-            radius=2,
+            radius=NUMBER_BOX_RADIUS,
             fill=1,
             stroke=0,
         )
