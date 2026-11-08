@@ -113,3 +113,53 @@ def test_show_after_message_restores_the_card(preview):
     preview.show("DEMOA001XYZW", ["Hi"])
 
     assert texts(preview) == ["Hi"]
+
+
+# ── card numbering ───────────────────────────────────────────────────────────
+def text_items(preview):
+    return {
+        preview.canvas.itemcget(item, "text"): preview.canvas.coords(item)
+        for item in preview.canvas.find_all()
+        if preview.canvas.type(item) == "text"
+    }
+
+
+def test_no_number_label_unless_asked(preview):
+    preview.show("DEMOA001XYZW", ["Hi"])
+
+    assert texts(preview) == ["Hi"]
+
+
+def test_number_label_sits_under_the_qr_code(preview):
+    preview.show("DEMOA001XYZW", ["Hi"], number="[1/125]")
+
+    items = text_items(preview)
+    assert "[1/125]" in items
+    label_x, label_y = items["[1/125]"]
+    width = int(preview.canvas.cget("width"))
+    height = int(preview.canvas.cget("height"))
+    qr_left, qr_top, qr_size = preview._qr_box(width / 252.0)
+
+    # Horizontally centred on the QR code, vertically between it and the bottom edge.
+    assert abs(label_x - (qr_left + qr_size / 2)) < 1
+    assert qr_top + qr_size < label_y < height
+    assert label_x > width * 2 / 3
+
+
+def test_number_label_is_drawn_over_a_background(clean_tk, tmp_path):
+    background = tmp_path / "bg.png"
+    Image.new("RGB", (400, 200), (10, 120, 200)).save(background)
+    widget = CardPreview(clean_tk, width=380)
+
+    widget.show("DEMOA001XYZW", ["Hi"], str(background), number="[7/9]")
+
+    assert len(images(widget)) == 2
+    assert "[7/9]" in texts(widget)
+
+
+def test_number_label_is_cleared_on_the_next_show(preview):
+    preview.show("DEMOA001XYZW", ["Hi"], number="[1/2]")
+
+    preview.show("DEMOA001XYZW", ["Hi"])
+
+    assert texts(preview) == ["Hi"]

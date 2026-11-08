@@ -53,6 +53,8 @@ The window has three numbered sections — **1 · Redemption codes**, **2 · Pri
 - **Generate + Build PDF** — does both in one go (probably what you want).
 
 Tick **Open the PDF when finished** and the PDF opens in your usual viewer as soon as it is written.
+Tick **Number the cards** to print a small `[1/125]`-style counter in the bottom-right corner of
+every card, centred under the QR code, so a printed stack is easy to count and keep in order.
 
 The **Preview** redraws as you edit the template, expiry date or background — same fractions,
 padding and font size the PDF uses, so you can see line breaks and any text that gets trimmed
@@ -72,8 +74,9 @@ padding and font size the PDF uses, so you can see line breaks and any text that
 3. **Expiry date** — free text substituted into `${EXPIRY}`, e.g. `July 31st 2026`.
 4. **Cards folder** — where the per-code folders are created (default `./output`). It is **emptied
    at the start of every run**, so the PDF only ever contains the codes you just generated.
-5. **PDF output** — where the finished PDF is written (default `./cards.pdf`). The checkbox below
-   it opens the PDF in your default viewer once the run finishes.
+5. **PDF output** — where the finished PDF is written (default `./cards.pdf`). The checkboxes below
+   it open the PDF in your default viewer once the run finishes, and number the cards
+   (`[1/125]`, `[2/125]`, … under each QR code — off by default).
 6. **Background image** — *optional*; centred and cropped to fill each card. If a file named
    `background.png` / `background.jpg` sits next to the scripts it is picked automatically.
 
@@ -96,12 +99,15 @@ python pokemon.py codes.csv template.txt --no-clean
 
 # Step 2 - printable PDF: ./cards.pdf
 python createpdf.py --pdf cards.pdf --background art.png
+
+# Same, with a [n/total] counter under every QR code:
+python createpdf.py --pdf cards.pdf --background art.png --numbered
 ```
 
 | Script | Arguments |
 | --- | --- |
 | `pokemon.py` | `csv` (required), `template` (default `template.txt`), `-o/--output` (default `./output`), `-e/--expiry` (default `N/A`), `--clean/--no-clean` (default `--clean`) |
-| `createpdf.py` | `output_dir` (default `./output`), `-p/--pdf` (default `./cards.pdf`), `-b/--background` (optional) |
+| `createpdf.py` | `output_dir` (default `./output`), `-p/--pdf` (default `./cards.pdf`), `-b/--background` (optional), `-n/--numbered` (default off) |
 
 You can also start the UI from the command line:
 
@@ -130,6 +136,7 @@ around 22 characters fits comfortably.
 | Left 2/3 | Semi-transparent white box with the message text |
 | Right 1/3 | QR code pointing at `https://store.pokemongo.com/offer-redemption?passcode=<CODE>` |
 | Background | Optional image, scaled to fill and clipped to the card |
+| Card number | Optional `[n/total]` label in the bottom-right corner, centred under the QR code |
 
 Print at **100% / actual size** — do not let the print dialog scale the page.
 

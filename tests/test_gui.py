@@ -335,6 +335,62 @@ def test_preview_refreshes_when_the_template_changes(root, inputs, tmp_path):
     assert pump(root, lambda: card_texts(app) == ["Hello AAAA1111"], timeout=5)
 
 
+# ── card numbering ───────────────────────────────────────────────────────────
+def test_numbering_is_off_by_default(root):
+    app = make_app(root)
+
+    assert app.numbered_var.get() is False
+    assert app._read_settings()["numbered"] is False
+
+
+def test_sample_codes_counts_every_code_in_the_file(root, inputs):
+    app = make_app(root, inputs)
+
+    assert app.sample_codes() == ("AAAA1111", 2)
+
+
+def test_sample_codes_fall_back_to_one_placeholder(root, tmp_path):
+    app = make_app(root)
+    app.csv_var.set(str(tmp_path / "missing.csv"))
+
+    assert app.sample_codes() == (PLACEHOLDER_CODE, 1)
+
+
+def test_preview_shows_the_card_number_when_ticked(root, inputs):
+    app = make_app(root, inputs)
+
+    app._refresh_preview()
+    assert "[1/2]" not in card_texts(app)
+
+    app.numbered_var.set(True)
+    app._refresh_preview()
+    assert "[1/2]" in card_texts(app)
+
+
+def test_preview_refreshes_when_numbering_is_toggled(root, inputs):
+    app = make_app(root, inputs)
+    app._refresh_preview()
+
+    app.numbered_var.set(True)
+    assert pump(root, lambda: "[1/2]" in card_texts(app), timeout=5)
+
+
+def test_build_numbers_the_cards_when_ticked(root, inputs, monkeypatch):
+    from reportlab import rl_config
+
+    monkeypatch.setattr(rl_config, "pageCompression", 0)
+    app = make_app(root, inputs)
+    app.numbered_var.set(True)
+    settings = app._read_settings()
+
+    app._generate(settings)
+    assert app._build(settings) == 2
+
+    data = inputs["pdf"].read_bytes()
+    assert b"[1/2]" in data
+    assert b"[2/2]" in data
+
+
 # ── temporary codes file ─────────────────────────────────────────────────────
 @pytest.fixture()
 def temp_root(tmp_path, monkeypatch):

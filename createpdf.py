@@ -40,11 +40,18 @@ def main(argv: list[str] | None = None) -> int:
         default=find_default_background(ROOT),
         help="Background image centred on each card (optional; auto-detects background.png/.jpg next to this script)",
     )
+    parser.add_argument(
+        "--numbered",
+        "-n",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Print a [n/total] label under each QR code (default: off)",
+    )
 
     args = parser.parse_args(argv)
 
     try:
-        build_pdf(args.output_dir, args.pdf, args.background)
+        build_pdf(args.output_dir, args.pdf, args.background, numbered=args.numbered)
     except GocaError as exc:
         parser.exit(2, f"error: {exc}\n")
     return 0

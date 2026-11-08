@@ -30,6 +30,9 @@ FONT_NAME = "Helvetica"
 FONT_SIZE = 9.0
 LINE_SPACING = FONT_SIZE * 1.4
 
+# Optional "[n/total]" label centred below the QR code
+NUMBER_FONT_SIZE = 7.0
+
 CARDS_PER_PAGE = COLS * ROWS
 
 DEFAULT_BACKGROUND_NAMES = ("background.png", "background.jpg", "background.jpeg")
@@ -78,14 +81,24 @@ def _fit_text(c: canvas.Canvas, text: str, max_width: float) -> str:
     return text[:lo]
 
 
+def card_number_label(index: int, total: int) -> str:
+    """Text drawn under the QR code when numbering is on, e.g. ``[1/125]``."""
+    return f"[{index}/{total}]"
+
+
 def draw_card(
     c: canvas.Canvas,
     x: float,
     y: float,
     card: dict,
     bg_path: str | None = None,
+    number: str | None = None,
 ) -> None:
-    """Draw a single business card with its bottom-left corner at (x, y)."""
+    """Draw a single business card with its bottom-left corner at (x, y).
+
+    *number* is an optional label (see :func:`card_number_label`) drawn in the
+    bottom-right corner, centred beneath the QR code.
+    """
     # ── background image (centred, fills card, aspect ratio maintained) ───────
     if bg_path:
         img = ImageReader(bg_path)
@@ -131,6 +144,28 @@ def draw_card(
         mask="auto",
     )
 
+    # ── card number (bottom right, centred under the QR code) ─────────────────
+    if number:
+        label_w = c.stringWidth(number, FONT_NAME, NUMBER_FONT_SIZE)
+        label_x = qr_x + qr_size / 2
+        # Centre the label in the strip between the QR code and the card edge.
+        label_y = y + (qr_y - y - NUMBER_FONT_SIZE) / 2 + NUMBER_FONT_SIZE * 0.25
+        c.saveState()
+        c.setFillColorRGB(1, 1, 1, alpha=0.75)
+        c.roundRect(
+            label_x - label_w / 2 - 3,
+            label_y - NUMBER_FONT_SIZE * 0.3,
+            label_w + 6,
+            NUMBER_FONT_SIZE * 1.3,
+            radius=2,
+            fill=1,
+            stroke=0,
+        )
+        c.restoreState()
+        c.setFont(FONT_NAME, NUMBER_FONT_SIZE)
+        c.setFillColorRGB(0, 0, 0)
+        c.drawCentredString(label_x, label_y, number)
+
     # ── message text (left two-thirds, vertically centred) ────────────────────
     msg_area_w = CARD_W * MSG_FRAC - PADDING * 2
     with open(card["msg_path"], encoding="utf-8") as f:
@@ -165,8 +200,12 @@ def build_pdf(
     pdf_path: str,
     bg_path: str | None = None,
     log: Log = print,
+    numbered: bool = False,
 ) -> int:
     """Render every card under *output_root* into *pdf_path*.
+
+    When *numbered* is true each card gets a ``[n/total]`` label under its QR
+    code, so a stack of printed cards is easy to count and keep in order.
 
     Returns the number of cards written (0 when no cards were found).
     """
@@ -199,7 +238,8 @@ def build_pdf(
             # ReportLab y=0 is bottom; fill rows top-to-bottom
             x = origin_x + col * CARD_W
             y = origin_y + (ROWS - 1 - row) * CARD_H
-            draw_card(c, x, y, card, bg_path)
+            number = card_number_label(page_idx + slot + 1, len(cards)) if numbered else None
+            draw_card(c, x, y, card, bg_path, number)
 
         c.showPage()
 

@@ -7,7 +7,13 @@ from PIL import Image
 
 from goca.codes import GocaError
 from goca.generator import process_codes
-from goca.pdf import CARDS_PER_PAGE, build_pdf, collect_cards, find_default_background
+from goca.pdf import (
+    CARDS_PER_PAGE,
+    build_pdf,
+    card_number_label,
+    collect_cards,
+    find_default_background,
+)
 
 _PAGE_RE = re.compile(rb"/Type\s*/Page[^s]")
 
@@ -143,3 +149,60 @@ def test_find_default_background(tmp_path):
     png = tmp_path / "background.png"
     png.write_bytes(b"\x89PNG")
     assert find_default_background(str(tmp_path)) == str(png)
+
+
+# ── card numbering ───────────────────────────────────────────────────────────
+@pytest.fixture()
+def uncompressed(monkeypatch):
+    """Leave page streams readable so the test can look for drawn text."""
+    from reportlab import rl_config
+
+    monkeypatch.setattr(rl_config, "pageCompression", 0)
+
+
+def test_card_number_label_format():
+    assert card_number_label(1, 125) == "[1/125]"
+    assert card_number_label(125, 125) == "[125/125]"
+
+
+def test_cards_are_not_numbered_by_default(tmp_path, uncompressed):
+    out = make_cards(tmp_path, 3)
+    pdf_path = tmp_path / "cards.pdf"
+
+    build_pdf(str(out), str(pdf_path), log=lambda _: None)
+
+    assert b"[1/3]" not in pdf_path.read_bytes()
+
+
+def test_numbered_cards_carry_their_position_and_total(tmp_path, uncompressed):
+    out = make_cards(tmp_path, 3)
+    pdf_path = tmp_path / "cards.pdf"
+
+    count = build_pdf(str(out), str(pdf_path), log=lambda _: None, numbered=True)
+
+    data = pdf_path.read_bytes()
+    assert count == 3
+    assert b"[1/3]" in data
+    assert b"[2/3]" in data
+    assert b"[3/3]" in data
+
+
+def test_numbering_continues_across_pages(tmp_path, uncompressed):
+    out = make_cards(tmp_path, CARDS_PER_PAGE + 2)
+    pdf_path = tmp_path / "cards.pdf"
+
+    build_pdf(str(out), str(pdf_path), log=lambda _: None, numbered=True)
+
+    data = pdf_path.read_bytes()
+    total = CARDS_PER_PAGE + 2
+    assert f"[{CARDS_PER_PAGE + 1}/{total}]".encode() in data
+    assert f"[{total}/{total}]".encode() in data
+
+
+def test_numbered_cards_work_with_a_background(tmp_path):
+    out = make_cards(tmp_path, 2)
+    bg = tmp_path / "background.png"
+    Image.new("RGB", (400, 200), (10, 120, 200)).save(bg)
+    pdf_path = tmp_path / "cards.pdf"
+
+    assert build_pdf(str(out), str(pdf_path), bg_path=str(bg), log=lambda _: None, numbered=True) == 2

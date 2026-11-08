@@ -12,7 +12,16 @@ from tkinter import font as tkfont
 from tkinter import ttk
 
 from .codes import redemption_url
-from .pdf import CARD_H, CARD_W, FONT_SIZE, LINE_SPACING, MSG_FRAC, PADDING, QR_FRAC
+from .pdf import (
+    CARD_H,
+    CARD_W,
+    FONT_SIZE,
+    LINE_SPACING,
+    MSG_FRAC,
+    NUMBER_FONT_SIZE,
+    PADDING,
+    QR_FRAC,
+)
 
 try:  # Pillow arrives with qrcode[pil]; the preview still works without it.
     from PIL import Image, ImageDraw, ImageTk
@@ -69,18 +78,29 @@ class CardPreview(ttk.Frame):
         self._code: str | None = None
         self._lines: list[str] = []
         self._background: str | None = None
+        self._number: str | None = None
         self._message: str | None = None
         self._font_cache: dict[int, tkfont.Font] = {}
 
         self.show_message(EMPTY_HINT)
 
     # ── public API ───────────────────────────────────────────────────────────
-    def show(self, code: str, lines: list[str], background: str | None = None) -> None:
-        """Preview *lines* rendered for *code* over *background*."""
+    def show(
+        self,
+        code: str,
+        lines: list[str],
+        background: str | None = None,
+        number: str | None = None,
+    ) -> None:
+        """Preview *lines* rendered for *code* over *background*.
+
+        *number* is an optional label such as ``[1/125]`` drawn under the QR code.
+        """
         self._message = None
         self._code = code
         self._lines = list(lines)
         self._background = background or None
+        self._number = number or None
         self.refresh()
 
     def show_message(self, message: str) -> None:
@@ -108,8 +128,14 @@ class CardPreview(ttk.Frame):
         top = (self._height - block_height) / 2
         pad = PADDING * scale
 
-        self._draw_background(top, block_height, pad, message_w)
+        label = self._number_geometry(scale)
+        self._draw_background(top, block_height, pad, message_w, label)
         self._draw_qr(scale)
+        if label is not None:
+            label_font, label_x, label_y, _ = label
+            self.canvas.create_text(
+                label_x, label_y, text=self._number, font=label_font, anchor="center", fill="#000000"
+            )
         for index, line in enumerate(lines):
             self.canvas.create_text(
                 pad,
@@ -137,7 +163,31 @@ class CardPreview(ttk.Frame):
             self._font_cache[size_px] = tkfont.Font(family="Helvetica", size=-size_px)
         return self._font_cache[size_px]
 
-    def _draw_background(self, top: float, block_height: float, pad: float, message_w: float) -> None:
+    def _qr_box(self, scale: float) -> tuple[float, float, float]:
+        """Return ``(left, top, size)`` of the QR code in canvas pixels."""
+        qr_area_w = CARD_W * QR_FRAC * scale
+        qr_size = min(qr_area_w, self._height) - PADDING * 2 * scale
+        left = self._width - qr_area_w + (qr_area_w - qr_size) / 2
+        return left, (self._height - qr_size) / 2, qr_size
+
+    def _number_geometry(self, scale: float) -> tuple[tkfont.Font, float, float, float] | None:
+        """Font, centre x, centre y and text width of the card-number label."""
+        if not self._number:
+            return None
+        font = self._font(round(NUMBER_FONT_SIZE * scale))
+        left, top, size = self._qr_box(scale)
+        # Centred in the strip between the QR code and the bottom edge, as in the PDF.
+        centre_y = top + size + (self._height - top - size) / 2
+        return font, left + size / 2, centre_y, font.measure(self._number)
+
+    def _draw_background(
+        self,
+        top: float,
+        block_height: float,
+        pad: float,
+        message_w: float,
+        label: tuple[tkfont.Font, float, float, float] | None = None,
+    ) -> None:
         has_image = bool(self._background) and Image is not None
         if not has_image:
             return
@@ -166,6 +216,14 @@ class CardPreview(ttk.Frame):
             radius=round(BOX_RADIUS * self._width / CARD_W),
             fill=(255, 255, 255, round(BOX_ALPHA * 255)),
         )
+        if label is not None:
+            label_font, label_x, label_y, label_w = label
+            half_h = label_font.metrics("linespace") / 2
+            draw.rounded_rectangle(
+                [label_x - label_w / 2 - 3, label_y - half_h, label_x + label_w / 2 + 3, label_y + half_h],
+                radius=2,
+                fill=(255, 255, 255, round(BOX_ALPHA * 255)),
+            )
         composed = Image.alpha_composite(card, overlay).convert("RGB")
 
         photo = ImageTk.PhotoImage(composed)
@@ -176,8 +234,7 @@ class CardPreview(ttk.Frame):
         if qrcode is None or ImageTk is None or not self._code:
             return
 
-        qr_area_w = CARD_W * QR_FRAC * scale
-        qr_size = min(qr_area_w, self._height) - PADDING * 2 * scale
+        left, top, qr_size = self._qr_box(scale)
         size_px = max(round(qr_size), 8)
 
         key = (self._code, size_px)
@@ -190,12 +247,7 @@ class CardPreview(ttk.Frame):
                 self._qr_cache.pop(next(iter(self._qr_cache)))
 
         self._images.append(photo)
-        self.canvas.create_image(
-            self._width - qr_area_w + (qr_area_w - qr_size) / 2,
-            (self._height - qr_size) / 2,
-            image=photo,
-            anchor="nw",
-        )
+        self.canvas.create_image(left, top, image=photo, anchor="nw")
 
     def _draw_hint(self, message: str) -> None:
         font = self._font(round(11 * self._width / CARD_W))

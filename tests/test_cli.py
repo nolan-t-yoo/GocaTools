@@ -86,3 +86,21 @@ def test_createpdf_cli_reports_missing_folder(workspace, capsys):
 
     assert excinfo.value.code == 2
     assert "Cards folder not found" in capsys.readouterr().err
+
+
+def test_createpdf_cli_numbers_cards_when_asked(workspace, monkeypatch):
+    from reportlab import rl_config
+
+    monkeypatch.setattr(rl_config, "pageCompression", 0)
+    root, csv_path, template_path = workspace
+    out = root / "output"
+    pokemon.main([str(csv_path), str(template_path), "-o", str(out)])
+    total = 2  # AAAA1111, BBBB2222
+
+    plain = root / "plain.pdf"
+    assert createpdf.main([str(out), "-p", str(plain)]) == 0
+    assert f"[1/{total}]".encode() not in plain.read_bytes()
+
+    numbered = root / "numbered.pdf"
+    assert createpdf.main([str(out), "-p", str(numbered), "--numbered"]) == 0
+    assert f"[1/{total}]".encode() in numbered.read_bytes()

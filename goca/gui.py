@@ -18,7 +18,7 @@ from tkinter import filedialog, messagebox, ttk
 from . import ROOT, __version__
 from .codes import DEFAULT_EXPIRY, GocaError, load_codes, load_template, render_message
 from .generator import process_codes
-from .pdf import build_pdf, find_default_background
+from .pdf import build_pdf, card_number_label, find_default_background
 from .preview import EMPTY_HINT, CardPreview
 
 APP_NAME = "GocaTools"
@@ -113,10 +113,11 @@ class GocaApp(ttk.Frame):
         self.pdf_var = tk.StringVar(value=os.path.join(ROOT, "cards.pdf"))
         self.bg_var = tk.StringVar(value=find_default_background(ROOT) or "")
         self.open_pdf_var = tk.BooleanVar(value=True)
+        self.numbered_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Ready.")
 
         self._preview_id: str | None = None
-        self._sample_cache: tuple[tuple, str] | None = None
+        self._sample_cache: tuple[tuple, tuple[str, int]] | None = None
         self._temp_sessions: list[str] = []
 
         self._build_widgets()
@@ -124,7 +125,7 @@ class GocaApp(ttk.Frame):
             f"{APP_NAME} {__version__} ready. Choose your files, then press "
             "'Generate + Build PDF'."
         )
-        for var in (self.csv_var, self.template_var, self.expiry_var, self.bg_var):
+        for var in (self.csv_var, self.template_var, self.expiry_var, self.bg_var, self.numbered_var):
             var.trace_add("write", self._on_preview_input)
         self._schedule_preview()
         self.bind("<Destroy>", self._on_destroy)
@@ -176,6 +177,12 @@ class GocaApp(ttk.Frame):
             target,
             text="Open the PDF when finished",
             variable=self.open_pdf_var,
+        ).grid(row=row, column=1, sticky="w", pady=(0, 4))
+        row += 1
+        ttk.Checkbutton(
+            target,
+            text="Number the cards - e.g. [1/125] under the QR code",
+            variable=self.numbered_var,
         ).grid(row=row, column=1, sticky="w", pady=(0, 4))
         row += 1
         self._path_row(
@@ -319,25 +326,34 @@ class GocaApp(ttk.Frame):
             self.preview.show_message(EMPTY_HINT)
             return
 
-        code = self.sample_code()
+        code, total = self.sample_codes()
         expiry = self.expiry_var.get().strip() or DEFAULT_EXPIRY
         lines = render_message(template, code, expiry).splitlines()
         while lines and not lines[-1].strip():
             lines.pop()
 
         background = self.bg_var.get().strip() or None
-        self.preview.show(code, lines, background)
+        number = card_number_label(1, total) if self.numbered_var.get() else None
+        self.preview.show(code, lines, background, number)
 
     def sample_code(self) -> str:
         """First code from the codes file, or a placeholder when there is none."""
+        return self.sample_codes()[0]
+
+    def sample_codes(self) -> tuple[str, int]:
+        """``(first code, how many codes)`` from the codes file.
+
+        Falls back to ``(PLACEHOLDER_CODE, 1)`` when the file is missing or empty.
+        """
+        fallback = (PLACEHOLDER_CODE, 1)
         path = self.csv_var.get().strip()
         if not path or not os.path.isfile(path):
-            return PLACEHOLDER_CODE
+            return fallback
 
         try:
             stat = os.stat(path)
         except OSError:
-            return PLACEHOLDER_CODE
+            return fallback
 
         key = (path, stat.st_mtime_ns, stat.st_size)
         if self._sample_cache and self._sample_cache[0] == key:
@@ -349,9 +365,9 @@ class GocaApp(ttk.Frame):
         except GocaError:
             codes = []
 
-        code = codes[0] if codes else PLACEHOLDER_CODE
-        self._sample_cache = (key, code)
-        return code
+        sample = (codes[0], len(codes)) if codes else fallback
+        self._sample_cache = (key, sample)
+        return sample
 
     # ── actions ──────────────────────────────────────────────────────────────
     def _read_settings(self) -> dict:
@@ -364,6 +380,7 @@ class GocaApp(ttk.Frame):
             "pdf": self.pdf_var.get().strip() or os.path.join(ROOT, "cards.pdf"),
             "bg": self.bg_var.get().strip() or None,
             "open_pdf": bool(self.open_pdf_var.get()),
+            "numbered": bool(self.numbered_var.get()),
         }
 
     def _generate(self, settings: dict) -> dict:
@@ -377,7 +394,13 @@ class GocaApp(ttk.Frame):
         )
 
     def _build(self, settings: dict) -> int:
-        count = build_pdf(settings["outdir"], settings["pdf"], settings["bg"], log=self._log)
+        count = build_pdf(
+            settings["outdir"],
+            settings["pdf"],
+            settings["bg"],
+            log=self._log,
+            numbered=settings.get("numbered", False),
+        )
         if count and settings.get("open_pdf") and os.path.isfile(settings["pdf"]):
             self._queue.put(("open", settings["pdf"]))
         return count
