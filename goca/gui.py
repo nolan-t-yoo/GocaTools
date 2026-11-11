@@ -121,6 +121,7 @@ class GocaApp(ttk.Frame):
         self.bg_var = tk.StringVar(value=find_default_background(ROOT) or "")
         self.open_pdf_var = tk.BooleanVar(value=True)
         self.numbered_var = tk.BooleanVar(value=False)
+        self.images_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Ready.")
 
         self._preview_id: str | None = None
@@ -190,6 +191,12 @@ class GocaApp(ttk.Frame):
             target,
             text="Number the cards - e.g. [1/125] under the QR code",
             variable=self.numbered_var,
+        ).grid(row=row, column=1, sticky="w", pady=(0, 4))
+        row += 1
+        ttk.Checkbutton(
+            target,
+            text="Also save a PNG of each card (card.png in its sub-folder)",
+            variable=self.images_var,
         ).grid(row=row, column=1, sticky="w", pady=(0, 4))
         row += 1
         self._path_row(
@@ -394,6 +401,7 @@ class GocaApp(ttk.Frame):
             "bg": self.bg_var.get().strip() or None,
             "open_pdf": bool(self.open_pdf_var.get()),
             "numbered": bool(self.numbered_var.get()),
+            "images": bool(self.images_var.get()),
         }
 
     def _generate(self, settings: dict) -> dict:
@@ -413,6 +421,7 @@ class GocaApp(ttk.Frame):
             settings["bg"],
             log=self._log,
             numbered=settings.get("numbered", False),
+            images=settings.get("images", False),
         )
         if count and settings.get("open_pdf") and os.path.isfile(settings["pdf"]):
             self._queue.put(("open", settings["pdf"]))

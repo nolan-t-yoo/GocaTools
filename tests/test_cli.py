@@ -104,3 +104,16 @@ def test_createpdf_cli_numbers_cards_when_asked(workspace, monkeypatch):
     numbered = root / "numbered.pdf"
     assert createpdf.main([str(out), "-p", str(numbered), "--numbered"]) == 0
     assert f"[1/{total}]".encode() in numbered.read_bytes()
+
+
+def test_createpdf_cli_writes_card_pngs_when_asked(workspace):
+    root, csv_path, template_path = workspace
+    out = root / "output"
+    pokemon.main([str(csv_path), str(template_path), "-o", str(out)])
+
+    assert createpdf.main([str(out), "-p", str(root / "cards.pdf")]) == 0
+    assert not (out / "AAAA1111" / "card.png").exists()
+
+    assert createpdf.main([str(out), "-p", str(root / "cards.pdf"), "--png"]) == 0
+    assert (out / "AAAA1111" / "card.png").is_file()
+    assert (out / "BBBB2222" / "card.png").is_file()

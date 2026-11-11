@@ -203,11 +203,15 @@ def build_pdf(
     bg_path: str | None = None,
     log: Log = print,
     numbered: bool = False,
+    images: bool = False,
 ) -> int:
     """Render every card under *output_root* into *pdf_path*.
 
     When *numbered* is true each card gets a ``[n/total]`` label under its QR
     code, so a stack of printed cards is easy to count and keep in order.
+
+    When *images* is true a ``card.png`` of each card is also written next to
+    its ``message.txt`` and ``QR.png``.
 
     Returns the number of cards written (0 when no cards were found).
     """
@@ -229,6 +233,10 @@ def build_pdf(
     if parent:
         os.makedirs(parent, exist_ok=True)
 
+    if images:
+        # Imported lazily so a broken Pillow install only affects this option.
+        from .cardimage import CARD_IMAGE_NAME, save_card_image
+
     c = canvas.Canvas(pdf_path, pagesize=LETTER)
 
     for page_idx in range(0, len(cards), CARDS_PER_PAGE):
@@ -242,9 +250,14 @@ def build_pdf(
             y = origin_y + (ROWS - 1 - row) * CARD_H
             number = card_number_label(page_idx + slot + 1, len(cards)) if numbered else None
             draw_card(c, x, y, card, bg_path, number)
+            if images:
+                image_path = os.path.join(os.path.dirname(card["msg_path"]), CARD_IMAGE_NAME)
+                save_card_image(card, image_path, bg_path, number)
 
         c.showPage()
 
     c.save()
     log(f"Saved {len(cards)} cards to: {pdf_path}")
+    if images:
+        log(f"Saved a {CARD_IMAGE_NAME} for each card under: {output_root}")
     return len(cards)

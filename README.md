@@ -49,12 +49,15 @@ The window has three numbered sections — **1 · Redemption codes**, **2 · Pri
 
 - **Generate cards only** — writes `<cards folder>/<CODE>/message.txt` and `QR.png` for every code,
   emptying the cards folder first.
-- **Build PDF only** — lays out whatever is already in the cards folder.
+- **Build PDF only** — lays out whatever is already in the cards folder (and, optionally, saves a
+  `card.png` per card alongside).
 - **Generate + Build PDF** — does both in one go (probably what you want).
 
 Tick **Open the PDF when finished** and the PDF opens in your usual viewer as soon as it is written.
 Tick **Number the cards** to print a small `[1/125]`-style counter in the bottom-right corner of
 every card, centred under the QR code, so a printed stack is easy to count and keep in order.
+Tick **Also save a PNG of each card** to get a 300 DPI `card.png` next to each code's
+`message.txt` and `QR.png` — handy for sending a single card digitally.
 
 The **Preview** redraws as you edit the template, expiry date or background — same fractions,
 padding and font size the PDF uses, so you can see line breaks and any text that gets trimmed
@@ -75,8 +78,9 @@ padding and font size the PDF uses, so you can see line breaks and any text that
 4. **Cards folder** — where the per-code folders are created (default `./output`). It is **emptied
    at the start of every run**, so the PDF only ever contains the codes you just generated.
 5. **PDF output** — where the finished PDF is written (default `./cards.pdf`). The checkboxes below
-   it open the PDF in your default viewer once the run finishes, and number the cards
-   (`[1/125]`, `[2/125]`, … under each QR code — off by default).
+   it open the PDF in your default viewer once the run finishes, number the cards
+   (`[1/125]`, `[2/125]`, … under each QR code) and save a PNG of every card into its
+   sub-folder. The last two are off by default.
 6. **Background image** — *optional*; centred and cropped to fill each card. If a file named
    `background.png` / `background.jpg` sits next to the scripts it is picked automatically.
 
@@ -102,12 +106,15 @@ python createpdf.py --pdf cards.pdf --background art.png
 
 # Same, with a [n/total] counter under every QR code:
 python createpdf.py --pdf cards.pdf --background art.png --numbered
+
+# Also write ./output/<CODE>/card.png (300 DPI) for every card:
+python createpdf.py --pdf cards.pdf --background art.png --png
 ```
 
 | Script | Arguments |
 | --- | --- |
 | `pokemon.py` | `csv` (required), `template` (default `template.txt`), `-o/--output` (default `./output`), `-e/--expiry` (default `N/A`), `--clean/--no-clean` (default `--clean`) |
-| `createpdf.py` | `output_dir` (default `./output`), `-p/--pdf` (default `./cards.pdf`), `-b/--background` (optional), `-n/--numbered` (default off) |
+| `createpdf.py` | `output_dir` (default `./output`), `-p/--pdf` (default `./cards.pdf`), `-b/--background` (optional), `-n/--numbered` (default off), `--png` (default off) |
 
 You can also start the UI from the command line:
 
@@ -159,6 +166,7 @@ goca/                    the application
   codes.py               reading code lists, rendering messages, QR images
   generator.py           one folder per code (message.txt + QR.png)
   pdf.py                 business-card PDF layout
+  cardimage.py           optional per-card PNG (same layout as the PDF)
   preview.py             on-screen card preview (mirrors the PDF layout)
   gui.py                 tkinter UI
 pokemon.py               CLI wrapper for step 1

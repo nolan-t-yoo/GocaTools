@@ -590,3 +590,23 @@ def test_sample_codes_count_matches_the_cards_a_run_would_make(root, tmp_path):
     app.csv_var.set(str(csv_path))
 
     assert app.sample_codes() == ("AAAA1111", 2)
+
+
+# ── per-card PNGs ────────────────────────────────────────────────────────────
+def test_card_images_are_off_by_default(root):
+    app = make_app(root)
+
+    assert app.images_var.get() is False
+    assert app._read_settings()["images"] is False
+
+
+def test_build_writes_card_images_when_ticked(root, inputs):
+    app = make_app(root, inputs)
+    app.images_var.set(True)
+    settings = app._read_settings()
+
+    app._generate(settings)
+    assert app._build(settings) == 2
+
+    assert (inputs["out"] / "AAAA1111" / "card.png").is_file()
+    assert (inputs["out"] / "BBBB2222" / "card.png").is_file()
